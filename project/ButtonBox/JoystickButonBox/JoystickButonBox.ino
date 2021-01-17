@@ -15,53 +15,29 @@
 
 Joystick_ Joystick;
 
-// Constant that maps the phyical pin to the joystick button.
-const int pinToButtonMap = 9;
-
-// Pin used
-int ledPin = 2;
-int buttonPin = 9;
-
-// Last state of the button
-int lastButtonState[4] = {0,0,0,0};
-
-
 void setup() {
-  
   // Initialize Button Pins
-  //pinMode(buttonPin, INPUT_PULLUP);
-  pinMode(buttonPin, INPUT);
-  pinMode(ledPin, OUTPUT);
-  
-  //pinMode(10, INPUT_PULLUP);
-  //pinMode(11, INPUT_PULLUP);
-  //pinMode(12, INPUT_PULLUP);
+  pinMode(8, INPUT_PULLUP);
+  pinMode(9, INPUT_PULLUP);
+  pinMode(10, INPUT_PULLUP);
+  pinMode(11, INPUT_PULLUP);
 
   // Initialize Joystick Library
   Joystick.begin();
 }
 
+// Constant that maps the phyical pin to the joystick button.
+const int pinToButtonMap = 8;
+
+// Last state of the button
+int lastButtonState[4] = {0,0,0,0};
+
 void loop() {
-
-  int stateButton = digitalRead(buttonPin);
-
-  if(stateButton == 0) 
-  { 
-    //if is pressed
-    digitalWrite(ledPin, HIGH); //write 1 or HIGH to led pin
-  } 
-  else 
-  { 
-    //if not pressed
-    digitalWrite(ledPin, LOW);  //write 0 or low to led pin
-  }
-
 
   // Read pin values
   for (int index = 0; index < 4; index++)
   {
     int currentButtonState = !digitalRead(index + pinToButtonMap);
-    
     if (currentButtonState != lastButtonState[index])
     {
       Joystick.setButton(index, currentButtonState);
