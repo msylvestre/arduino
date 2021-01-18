@@ -14,14 +14,15 @@ Joystick_ Joystick;         // Used to press the cutton on the joystick
 elapsedMillis timeElapsed;  // Used to calucale easily the time elapse between 2 event
 
 // Pins setting
-const int START_ENGINE_PIN = 8; // Windows Button 1, Joystick 0
-const int IGNITION_PIN = 9;     // Windows Button 2, Joystick 1
-const int LED1_PIN = 2;         // Ignition Led
+const int START_ENGINE_PIN = 0; // Windows Button 1, Joystick 0
+const int IGNITION_PIN = 12;     // Windows Button 2, Joystick 1
+const int LED1_PIN = 13;         // Ignition Led
 
-// Used to match the pin with the joystick button: IGNITION_PIN(9) - JOYSTICK_OFFSET(8) = JoystickButton(1)
-const int JOYSTICK_OFFSET = 8;  
+// List of Windows joystick button used.
+const int IGNITION_BUTTON = 0;
+const int START_ENGINE_BUTTON = 1;
 
-// Define the time the button is hold
+// AMount of time we keep the button pushed
 const int INTERVAL = 200; //milliseconds
 
 // Use to trigger the release of the button after the TRIGGER_INTERVAL
@@ -65,6 +66,9 @@ void loop()
 //======================================================================
 // FUNCTIONS
 
+
+// IGNITION SWITCH
+
 void UpdateIgnitionSwitchState()
 {
   // Read the state of the Ignition 
@@ -77,7 +81,7 @@ void UpdateIgnitionSwitchState()
     //Serial.println("change of status");
 
     // Press the button
-    Joystick.setButton(IGNITION_PIN - JOYSTICK_OFFSET, 1);
+    Joystick.setButton(IGNITION_BUTTON, 1);
 
     // Turn on/off the led based on the ignitition button switch
     UpdateIgnitionLedState(currentIgnitionSwitchState);
@@ -95,15 +99,19 @@ void UpdateIgnitionSwitchState()
 }
 
 
-void UpdateStartButtonState()
+void checkToReleaseTheButton()
 {
-  // Start Engine
-  int currentButtonState = !digitalRead(START_ENGINE_PIN);
-  
-  if (currentButtonState != lastStartButtonState)
+  // After the INTERVAL in milliseconds, release the joystick button
+  if (timeElapsed > INTERVAL && checkToReleaseTheButtonFlag == true) 
   {
-      Joystick.setButton(START_ENGINE_PIN - JOYSTICK_OFFSET, currentButtonState);  // 0 is Button 1, which is pin 8
-      lastStartButtonState = currentButtonState;
+    // DEBUG
+    //Serial.println("time ups");  
+    
+    // Release the button
+    Joystick.setButton(IGNITION_BUTTON, 0);
+    
+    // Set the flag so we won't set the button again until the next state change
+    checkToReleaseTheButtonFlag = false;
   }
 }
 
@@ -121,18 +129,16 @@ void UpdateIgnitionLedState(int currentIgnitionSwitchState)
 }
 
 
-void checkToReleaseTheButton()
+// START ENGINE BUTTON
+
+void UpdateStartButtonState()
 {
-  // After the INTERVAL in milliseconds, release the joystick button
-  if (timeElapsed > INTERVAL && checkToReleaseTheButtonFlag == true) 
+  // Start Engine
+  int currentButtonState = !digitalRead(START_ENGINE_PIN);
+  
+  if (currentButtonState != lastStartButtonState)
   {
-    // DEBUG
-    //Serial.println("time ups");  
-    
-    // Release the button
-    Joystick.setButton(IGNITION_PIN - JOYSTICK_OFFSET, 0);
-    
-    // Set the flag so we won't set the button again until the next state change
-    checkToReleaseTheButtonFlag = false;
+      Joystick.setButton(START_ENGINE_BUTTON, currentButtonState);  // 0 is Button 1, which is pin 8
+      lastStartButtonState = currentButtonState;
   }
 }
