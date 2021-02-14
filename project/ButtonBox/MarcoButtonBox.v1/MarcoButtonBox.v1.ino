@@ -4,7 +4,8 @@
 
 #include <Joystick.h>
 #include <elapsedMillis.h>
-#include <Rotary.h>
+#include <TimerOne.h>
+#include <ClickEncoder.h>
 
 //======================================================================
 // VARIABLES DECLARATION
@@ -15,9 +16,9 @@ elapsedMillis timeElapsedIgn;      // Used to calucale easily the time elapse be
 elapsedMillis timeElapsedBrkBias;  // Used to calucale easily the time elapse between 2 event
 
 // Pins setting
-const int START_ENGINE_PIN = 0; // Windows Button 1, Joystick 0
-const int IGNITION_PIN = 12;     // Windows Button 2, Joystick 1
-const int LED1_PIN = 13;         // Ignition Led
+const int START_ENGINE_PIN = 0;         // Windows Button 1, Joystick 0
+const int IGNITION_PIN = 12;            // Windows Button 2, Joystick 1
+const int LED1_PIN = 13;                // Ignition Led
 const int BRAKE_BIAS_BACKWARD_PIN = 15;
 const int BRAKE_BIAS_FORWARD_PIN = 14;
 
@@ -27,20 +28,21 @@ const int START_ENGINE_BUTTON = 1;
 const int BRAKE_BIAS_FORWARD_BUTTON = 3;
 const int BRAKE_BIAS_BACKWARD_BUTTON = 2;
 
-//Rotary encoders
-Rotary rotary = Rotary(BRAKE_BIAS_BACKWARD_PIN, BRAKE_BIAS_FORWARD_PIN);
-
-
 // AMount of time we keep the button pushed
-const int INTERVAL = 300; //milliseconds
+const int INTERVAL = 200; //milliseconds
 
 // Use to trigger the release of the button after the TRIGGER_INTERVAL
 bool checkToReleaseIgnButtonFlag = false;
 bool checkToReleaseBrkBiasButtonFlag = false;
 
+//Rotary encoders
+ClickEncoder *encoder;
+
 // Last state of the button
 int lastStartButtonState = 0;
 int lastIgnitionSwitchState = 0;
+int16_t lastBrakeBiasPos = 0;
+int16_t newBrakeBiasPos = 0;
 
 int counter = 0;
 String rotarySide = "";
@@ -54,6 +56,13 @@ void setup()
   pinMode(START_ENGINE_PIN, INPUT_PULLUP); 
   pinMode(IGNITION_PIN, INPUT_PULLUP);
   pinMode(LED1_PIN, OUTPUT);
+
+  // Declare encoder
+  encoder = new ClickEncoder(BRAKE_BIAS_BACKWARD_PIN, BRAKE_BIAS_FORWARD_PIN);
+
+  // Initialize an interrup function to monitor the brake bias
+  Timer1.initialize(300000); // 0.05 sec (1 000 000 = 1 sec)
+  Timer1.attachInterrupt(brakeBiasTimerInterrupt); 
    
   // Initialize Joystick Library
   Joystick.begin();
@@ -64,14 +73,10 @@ void setup()
   
 
 void loop() 
-{
-  // Act when the Ignition is turned on/off
-  UpdateIgnitionSwitchState();
-
-  // Act when the Start button is pressed
-  UpdateStartButtonState();
-
-  UpdateBrakeBiasState();
+{  
+  UpdateIgnitionSwitchState();  // Act when the Ignition is turned on/off
+  UpdateStartButtonState();     // Act when the Start button is pressed
+  UpdateBrakeBiasState();       // Act when the brake bias is turned
 }
 
 
@@ -105,22 +110,26 @@ void UpdateIgnitionSwitchState()
     timeElapsedIgn = 0;
     checkToReleaseIgnButtonFlag = true;
   }
+  
+  bool buttonReleased = false;
 
   // Check if the button need to be released after a status change
-  bool r = checkToReleaseTheButton(IGNITION_BUTTON, timeElapsedIgn, checkToReleaseIgnButtonFlag);
-
-  if (r == true)
+  if (checkToReleaseIgnButtonFlag == true)
+  {
+    buttonReleased = checkToReleaseTheButton(IGNITION_BUTTON, timeElapsedIgn);
+  }
+  
+  if (buttonReleased == true)
   {
     checkToReleaseIgnButtonFlag = false;
   }
-
 }
 
 
 // IGNITION LED
 
 void UpdateIgnitionLedState(int currentIgnitionSwitchState)
-{
+{ 
     if (currentIgnitionSwitchState == HIGH)
     {
       digitalWrite(LED1_PIN, HIGH);
@@ -141,8 +150,9 @@ void UpdateStartButtonState()
   
   if (currentButtonState != lastStartButtonState)
   {
-      Joystick.setButton(START_ENGINE_BUTTON, currentButtonState);  // 0 is Button 1, which is pin 8
-      lastStartButtonState = currentButtonState;
+    Serial.println("Gentelmens Start Your Engine !");
+    Joystick.setButton(START_ENGINE_BUTTON, currentButtonState);  // 0 is Button 1, which is pin 8
+    lastStartButtonState = currentButtonState;
   }
 }
 
@@ -152,51 +162,52 @@ void UpdateStartButtonState()
 void UpdateBrakeBiasState()
 {  
   bool isButtonReleased = false;
-  unsigned char result = rotary.process();
 
-  //Serial.println("rotary: " + result);
-  
-  if (result == DIR_CW) 
+  // Read the brake bias rotation (+1 forward, -1 backward)
+  newBrakeBiasPos += encoder->getValue();
+
+  if (newBrakeBiasPos != lastBrakeBiasPos) 
   {
-    counter++;
-    Serial.println(counter);
+    Serial.print("Encoder newBrakeBiasPos: ");
+    Serial.println(newBrakeBiasPos);
     
-    // Press the button
-    Joystick.setButton(BRAKE_BIAS_FORWARD_BUTTON, 1);
-    timeElapsedBrkBias = 0;
-    checkToReleaseBrkBiasButtonFlag = true;
-    rotarySide = "CW";
-  } 
-  else if (result == DIR_CCW) 
-  {
-    counter--;
-    Serial.println(counter);
-
-    // Press the button
-    Joystick.setButton(BRAKE_BIAS_BACKWARD_BUTTON, 1);
-    timeElapsedBrkBias = 0;
-    checkToReleaseBrkBiasButtonFlag = true;
-    rotarySide = "CCW";
-  }
-
-  if (rotarySide == "CW")
-  {
-    isButtonReleased = checkToReleaseTheButton(BRAKE_BIAS_FORWARD_BUTTON, timeElapsedBrkBias, checkToReleaseBrkBiasButtonFlag);
-  }
-  else if (rotarySide == "CCW")
-  {
-    isButtonReleased = checkToReleaseTheButton(BRAKE_BIAS_BACKWARD_BUTTON, timeElapsedBrkBias, checkToReleaseBrkBiasButtonFlag);
-  }
-  /*else
-  {
-    Joystick.setButton(BRAKE_BIAS_FORWARD_BUTTON, 0);
-    Joystick.setButton(BRAKE_BIAS_BACKWARD_BUTTON, 0);
-  }*/
-
-  //Serial.println("result: " + result);
-
-  //Serial.println("rotarySide: " + rotarySide);
+    if (newBrakeBiasPos > lastBrakeBiasPos) // Clockwise
+    {
+      counter++;
+      Serial.println(counter);
+      
+      lastBrakeBiasPos = newBrakeBiasPos;
+      
+      // Press the button
+      Joystick.setButton(BRAKE_BIAS_FORWARD_BUTTON, 1);
+      timeElapsedBrkBias = 0;
+      checkToReleaseBrkBiasButtonFlag = true;
+      rotarySide = "CW";
+    } 
+    else if (newBrakeBiasPos < lastBrakeBiasPos) // Counter Clockwise
+    {
+      counter--;
+      Serial.println(counter);
   
+      lastBrakeBiasPos = newBrakeBiasPos;
+      
+      // Press the button
+      Joystick.setButton(BRAKE_BIAS_BACKWARD_BUTTON, 1);
+      timeElapsedBrkBias = 0;
+      checkToReleaseBrkBiasButtonFlag = true;
+      rotarySide = "CCW";
+    }
+  }  
+
+  if (rotarySide == "CW" && checkToReleaseBrkBiasButtonFlag == true)
+  {
+    isButtonReleased = checkToReleaseTheButton(BRAKE_BIAS_FORWARD_BUTTON, timeElapsedBrkBias);
+  }
+  else if (rotarySide == "CCW"  && checkToReleaseBrkBiasButtonFlag == true)
+  {
+    isButtonReleased = checkToReleaseTheButton(BRAKE_BIAS_BACKWARD_BUTTON, timeElapsedBrkBias);
+  }
+
   if (isButtonReleased == true)
   {
     checkToReleaseBrkBiasButtonFlag = false;
@@ -207,12 +218,12 @@ void UpdateBrakeBiasState()
 
 // HELPER
 
-bool checkToReleaseTheButton(int button, elapsedMillis timeElapsed, bool checkToReleaseFlag)
+bool checkToReleaseTheButton(int button, elapsedMillis timeElapsed)
 {
   bool result;
   
   // After the INTERVAL in milliseconds, release the joystick button
-  if ((timeElapsed > INTERVAL) && checkToReleaseFlag == true) 
+  if ((timeElapsed > INTERVAL)) 
   {
     // DEBUG
     Serial.println("time ups");  
@@ -228,4 +239,9 @@ bool checkToReleaseTheButton(int button, elapsedMillis timeElapsed, bool checkTo
   }
 
   return result;
+}
+
+void brakeBiasTimerInterrupt() 
+{
+  encoder -> service();
 }
